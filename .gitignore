@@ -1,0 +1,31 @@
+# Node
+node_modules/
+.npm-cache/
+dist/
+build/
+.env
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+.env
+*.db
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/chat_uploads/*
+!backend/chat_uploads/.gitkeep
+
