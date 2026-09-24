@@ -28,4 +28,6 @@ backend/uploads/*
 !backend/uploads/.gitkeep
 backend/chat_uploads/*
 !backend/chat_uploads/.gitkeep
+package-lock.json
+
 
