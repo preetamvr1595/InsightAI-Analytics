@@ -15,6 +15,7 @@ A full-stack, production-ready analytics platform with 6 complete pages.
 
 ## Tech Stack
 
+
 - **Frontend**: React 18, Recharts, CSS custom properties
 - **Backend**: Python, FastAPI, pandas, numpy, scikit-learn
 - **Storage**: Local filesystem + JSON metadata
