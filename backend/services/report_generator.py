@@ -342,3 +342,167 @@ def generate_excel(messages: List[Dict[str, Any]]) -> bytes:
 
     wb.close()
     return buf.getvalue()
+
+
+# ─── EXECUTIVE DATASET PDF REPORT ──────────────────────────────
+def generate_executive_pdf(filename: str, summary: Dict[str, Any], stats: Dict[str, Any] = None, corr: List[Dict[str, Any]] = None, research: Dict[str, Any] = None) -> bytes:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable)
+    from reportlab.graphics.shapes import Drawing
+    from reportlab.graphics.charts.barcharts import VerticalBarChart
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+        rightMargin=16*mm, leftMargin=16*mm, topMargin=16*mm, bottomMargin=16*mm)
+
+    W = A4[0] - 32*mm
+    ref = _ref_id()
+    now_str = datetime.now().strftime("%d/%m/%Y, %I:%M %p")
+
+    styles = getSampleStyleSheet()
+    def ps(name, **kw):
+        return ParagraphStyle(name, parent=styles['Normal'], **kw)
+
+    hdr_title   = ps('hdr_t', fontSize=20, fontName='Helvetica-Bold', textColor=colors.white)
+    hdr_sub     = ps('hdr_s', fontSize=9, textColor=colors.HexColor('#d0d0ff'))
+    sec_title   = ps('sec_t', fontSize=13, fontName='Helvetica-Bold', textColor=colors.HexColor('#1a1a2e'), spaceBefore=14, spaceAfter=6)
+    body_style  = ps('bdy', fontSize=9, leading=14, textColor=colors.HexColor('#333333'), spaceAfter=4)
+    bullet_style= ps('bul', fontSize=9, leading=14, textColor=colors.HexColor('#222222'), leftIndent=12, spaceAfter=2)
+
+    story = []
+
+    # 1. Header Banner
+    header_data = [[
+        Paragraph("<b>InsightAI Executive Dataset Report</b>", hdr_title),
+        Paragraph(f"<b>DATASET:</b> {filename[:25]}<br/><b>REF ID:</b> {ref}<br/><b>DATE:</b> {now_str}", hdr_sub)
+    ]]
+    ht = Table(header_data, colWidths=[W*0.62, W*0.38])
+    ht.setStyle(TableStyle([
+        ('BACKGROUND', (0,0),(-1,-1), colors.HexColor('#1a1a2e')),
+        ('VALIGN', (0,0),(-1,-1), 'MIDDLE'),
+        ('ALIGN', (1,0),(1,0), 'RIGHT'),
+        ('TOPPADDING', (0,0),(-1,-1), 12),
+        ('BOTTOMPADDING', (0,0),(-1,-1), 12),
+        ('LEFTPADDING', (0,0),(0,0), 14),
+        ('RIGHTPADDING', (1,0),(1,0), 14),
+    ]))
+    story.append(ht)
+    story.append(Spacer(1, 10))
+
+    # 2. Executive Overview
+    story.append(Paragraph("1. Executive Summary & Quality Overview", sec_title))
+    total_rows = summary.get('total_rows', 0) if summary else 0
+    total_cols = summary.get('total_columns', 0) if summary else 0
+    num_cols = summary.get('numeric_columns', 0) if summary else 0
+    cat_cols = summary.get('categorical_columns', 0) if summary else 0
+    missing_cells = summary.get('total_missing', 0) if summary else 0
+    total_cells = total_rows * max(total_cols, 1)
+    quality_score = max(0, min(100, int(100 - (missing_cells / max(total_cells, 1) * 100))))
+
+    kpi_data = [
+        ["Total Records", "Total Columns", "Numeric Cols", "Categorical Cols", "Data Quality"],
+        [str(total_rows), str(total_cols), str(num_cols), str(cat_cols), f"{quality_score}%"]
+    ]
+    kt = Table(kpi_data, colWidths=[W/5]*5)
+    kt.setStyle(TableStyle([
+        ('BACKGROUND', (0,0),(-1,0), colors.HexColor('#4b0082')),
+        ('TEXTCOLOR', (0,0),(-1,0), colors.white),
+        ('FONTNAME', (0,0),(-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0),(-1,-1), 9),
+        ('ALIGN', (0,0),(-1,-1), 'CENTER'),
+        ('BACKGROUND', (0,1),(-1,1), colors.HexColor('#f0efff')),
+        ('TEXTCOLOR', (0,1),(-1,1), colors.HexColor('#1a1a2e')),
+        ('FONTNAME', (0,1),(-1,1), 'Helvetica-Bold'),
+        ('GRID', (0,0),(-1,-1), 0.5, colors.HexColor('#ccccdd')),
+        ('TOPPADDING', (0,0),(-1,-1), 6),
+        ('BOTTOMPADDING', (0,0),(-1,-1), 6),
+    ]))
+    story.append(kt)
+    story.append(Spacer(1, 10))
+
+    # 3. Descriptive Statistics Table
+    if stats:
+        story.append(Paragraph("2. Descriptive Statistics (Key Columns)", sec_title))
+        cols_shown = list(stats.keys())[:8]
+        sdata = [["Column", "Mean", "Std", "Min", "50% (Median)", "Max"]]
+        for col in cols_shown:
+            cstats = stats[col]
+            if isinstance(cstats, dict):
+                sdata.append([
+                    col[:18],
+                    f"{cstats.get('mean', 0):.2f}" if isinstance(cstats.get('mean'), (int, float)) else str(cstats.get('mean','—')),
+                    f"{cstats.get('std', 0):.2f}" if isinstance(cstats.get('std'), (int, float)) else str(cstats.get('std','—')),
+                    f"{cstats.get('min', 0):.2f}" if isinstance(cstats.get('min'), (int, float)) else str(cstats.get('min','—')),
+                    f"{cstats.get('50%', cstats.get('median', 0)):.2f}" if isinstance(cstats.get('50%', cstats.get('median')), (int, float)) else '—',
+                    f"{cstats.get('max', 0):.2f}" if isinstance(cstats.get('max'), (int, float)) else str(cstats.get('max','—'))
+                ])
+        if len(sdata) > 1:
+            st = Table(sdata, colWidths=[W*0.25, W*0.15, W*0.15, W*0.15, W*0.15, W*0.15])
+            st.setStyle(TableStyle([
+                ('BACKGROUND', (0,0),(-1,0), colors.HexColor('#1a1a2e')),
+                ('TEXTCOLOR', (0,0),(-1,0), colors.white),
+                ('FONTNAME', (0,0),(-1,0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0,0),(-1,-1), 8),
+                ('ROWBACKGROUNDS', (0,1),(-1,-1), [colors.HexColor('#f8f7ff'), colors.white]),
+                ('GRID', (0,0),(-1,-1), 0.3, colors.HexColor('#ccccdd')),
+                ('TOPPADDING', (0,0),(-1,-1), 4),
+                ('BOTTOMPADDING', (0,0),(-1,-1), 4),
+            ]))
+            story.append(st)
+            story.append(Spacer(1, 10))
+
+    # 4. Key Correlations
+    if corr:
+        strong_corrs = [c for c in corr if c.get('x') != c.get('y') and abs(c.get('value', 0)) >= 0.3]
+        strong_corrs.sort(key=lambda x: abs(x.get('value', 0)), reverse=True)
+        if strong_corrs:
+            story.append(Paragraph("3. Key Statistical Correlations", sec_title))
+            cdata = [["Feature 1", "Feature 2", "Correlation (r)", "Relationship"]]
+            for item in strong_corrs[:6]:
+                val = item.get('value', 0)
+                rel = "Strong Positive" if val > 0.6 else ("Moderate Positive" if val > 0 else ("Strong Negative" if val < -0.6 else "Moderate Negative"))
+                cdata.append([item.get('x','')[:20], item.get('y','')[:20], f"{val:.4f}", rel])
+            ct = Table(cdata, colWidths=[W*0.3, W*0.3, W*0.2, W*0.2])
+            ct.setStyle(TableStyle([
+                ('BACKGROUND', (0,0),(-1,0), colors.HexColor('#2e7d32')),
+                ('TEXTCOLOR', (0,0),(-1,0), colors.white),
+                ('FONTNAME', (0,0),(-1,0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0,0),(-1,-1), 8),
+                ('ROWBACKGROUNDS', (0,1),(-1,-1), [colors.HexColor('#f0fff4'), colors.white]),
+                ('GRID', (0,0),(-1,-1), 0.3, colors.HexColor('#ccccdd')),
+                ('TOPPADDING', (0,0),(-1,-1), 4),
+                ('BOTTOMPADDING', (0,0),(-1,-1), 4),
+            ]))
+            story.append(ct)
+            story.append(Spacer(1, 10))
+
+    # 5. AI Research & Learner Intelligence (If applicable)
+    if research:
+        story.append(Paragraph("4. AI Research & Performance Intelligence", sec_title))
+        if 'classify' in research and research['classify']:
+            summary_cls = research['classify'].get('summary', {})
+            story.append(Paragraph("<b>Learner Speed Index (LSI) Classification Summary:</b>", body_style))
+            for cat, cnt in summary_cls.items():
+                story.append(Paragraph(f"• <b>{cat}:</b> {cnt} students", bullet_style))
+            story.append(Spacer(1, 4))
+        if 'risk' in research and research['risk']:
+            high_risk = research['risk'].get('total_high_risk', 0)
+            story.append(Paragraph(f"⚠️ <b>Performance Risk Alert:</b> {high_risk} students identified at high risk of falling behind.", body_style))
+            story.append(Spacer(1, 6))
+
+    # 6. Actionable AI Recommendations
+    story.append(Paragraph("5. Strategic Recommendations & Next Steps", sec_title))
+    recs = [
+        "Monitor columns with higher missingness and apply automated imputation (mean/median/mode) prior to downstream model training.",
+        "Utilize key statistical correlations to prune redundant feature variables and optimize model complexity.",
+        "For educational & learner analytics datasets, deploy automated intervention triggers for individuals identified in the Struggling/High-Risk categories.",
+        "Perform interactive feature importance analysis on critical target outcomes to identify key levers for performance improvement."
+    ]
+    for r in recs:
+        story.append(Paragraph(f"• {r}", bullet_style))
+
+    doc.build(story)
+    return buf.getvalue()
