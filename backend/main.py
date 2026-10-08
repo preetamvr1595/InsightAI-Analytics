@@ -3,9 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
 
+
 from routes import upload, analytics, explorer, history, chat, research
 
 app = FastAPI(title="AI Analytics Platform", version="1.0.0")
+
 
 app.add_middleware(
     CORSMiddleware,
